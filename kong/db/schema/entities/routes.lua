@@ -79,6 +79,7 @@ return {
     { strip_path     = { type = "boolean", default = true }, },
     { preserve_host  = { type = "boolean", default = false }, },
     { service        = { type = "foreign", reference = "services", required = true }, },
+    { tags            = typedefs.tags },
   },
 
   entity_checks = {

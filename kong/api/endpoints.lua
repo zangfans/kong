@@ -90,7 +90,7 @@ end
 local function get_collection_endpoint(schema, foreign_schema, foreign_field_name)
   return not foreign_schema and function(self, db, helpers)
     local data, _, err_t, offset = db[schema.name]:page(self.args.size,
-                                                        self.args.offset)
+                                                        self.args.offset, self.args.tags)
     if err_t then
       return handle_error(err_t)
     end

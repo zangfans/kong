@@ -795,5 +795,16 @@ return {
       ALTER TABLE upstreams DROP hash_on_cookie;
       ALTER TABLE upstreams DROP hash_on_cookie_path;
     ]]
+  },
+  {
+    name = "2018-08-10-381283_tags",
+    up = [[
+      ALTER TABLE services ADD tags text[];
+      ALTER TABLE routes ADD tags text[];
+    ]],
+    down = [[
+      ALTER TABLE services DROP tags;
+      ALTER TABLE routes DROP tags;
+    ]]
   }
 }

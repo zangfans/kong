@@ -251,7 +251,7 @@ function DAO:select(primary_key)
 end
 
 
-function DAO:page(size, offset)
+function DAO:page(size, offset, tags)
   size = tonumber(size == nil and 100 or size)
 
   if not size then
@@ -268,7 +268,7 @@ function DAO:page(size, offset)
     error("offset must be a string", 2)
   end
 
-  local rows, err_t, offset = self.strategy:page(size, offset)
+  local rows, err_t, offset = self.strategy:page(size, offset, nil, nil, tags)
   if err_t then
     return nil, tostring(err_t), err_t
   end
@@ -296,6 +296,42 @@ function DAO:each(size)
   end
 
   local next_row = self.strategy:each(size)
+
+  return function()
+    local row, err_t, page = next_row()
+    if not row then
+      if err_t then
+        return nil, tostring(err_t), err_t
+      end
+
+      return nil
+    end
+
+    local err
+    row, err, err_t = self:row_to_entity(row)
+    if not row then
+      return nil, err, err_t
+    end
+
+    return row, nil, page
+  end
+end
+
+
+function DAO:each_by_tags(size, tags)
+  size = tonumber(size == nil and 100 or size)
+
+  if not size then
+    error("size must be a number", 2)
+  end
+
+  size = min(size, 1000)
+
+  if size < 0 then
+    error("size must be positive (> 0)", 2)
+  end
+
+  local next_row = self.strategy:each_by_tags(size, tags)
 
   return function()
     local row, err_t, page = next_row()

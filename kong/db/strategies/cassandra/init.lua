@@ -619,7 +619,7 @@ do
   local opts = new_tab(0, 2)
 
 
-  function _mt:page(size, offset, foreign_key, foreign_key_db_columns)
+  function _mt:page(size, offset, foreign_key, foreign_key_db_columns, tags)
     if offset then
       local offset_decoded = decode_base64(offset)
       if not offset_decoded then
@@ -633,7 +633,22 @@ do
     local args
     local err
 
-    if not foreign_key then
+    if tags and #tags > 0 then
+      args = new_tab(#tags, 0)
+      cql, err = get_query(self, "select_with_filter")
+      if err then
+        return nil, err
+      end
+
+      local contains_cql = ""
+      for i, tag in ipairs(tags) do
+        contains_cql = contains_cql .. ((i > 1) and " AND" or "") .. " tags CONTAINS ?"
+        args[i] = cassandra.text(tag)
+      end
+
+      cql = fmt(cql, contains_cql .. " ALLOW FILTERING")
+
+    elseif not foreign_key then
       cql, err = get_query(self, "select_page")
       if err then
         return nil, err
@@ -689,7 +704,7 @@ do
       local offset = self.offset
       local strategy = self.strategy
 
-      local rows, err_t, next_offset = strategy:page(size, offset)
+      local rows, err_t, next_offset = strategy:page(size, offset, nil, nil, self.tags)
       if not rows then
         return nil, err_t
       end
@@ -734,6 +749,21 @@ do
       offset       = nil,
       size         = size,
       strategy     = self,
+    }
+
+    return setmetatable(iter_ctx, iter_mt)
+  end
+
+
+  function _mt:each_by_tags(size, tags)
+    local iter_ctx = {
+      page         = 0,
+      rows         = nil,
+      rows_idx     = nil,
+      offset       = nil,
+      size         = size,
+      strategy     = self,
+      tags         = tags,
     }
 
     return setmetatable(iter_ctx, iter_mt)

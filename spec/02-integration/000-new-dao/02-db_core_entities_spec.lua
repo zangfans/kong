@@ -160,6 +160,7 @@ for _, strategy in helpers.each_strategy() do
             preserve_host   = false,
             strip_path      = true,
             service         = route.service,
+            tags            = ngx.null,
           }, route)
         end)
 
@@ -171,6 +172,7 @@ for _, strategy in helpers.each_strategy() do
             regex_priority  = 3,
             strip_path      = true,
             service         = bp.services:insert(),
+            tags            = { "hello", "world" },
           })
           assert.is_nil(err_t)
           assert.is_nil(err)
@@ -192,6 +194,7 @@ for _, strategy in helpers.each_strategy() do
             strip_path      = true,
             preserve_host   = false,
             service         = route.service,
+            tags            = { "hello", "world" },
           }, route)
         end)
 
@@ -335,6 +338,7 @@ for _, strategy in helpers.each_strategy() do
             strip_path      = route.strip_path,
             preserve_host   = route.preserve_host,
             service         = route.service,
+            tags            = ngx.null,
           }, new_route)
 
 
@@ -860,6 +864,7 @@ for _, strategy in helpers.each_strategy() do
             write_timeout   = 60000,
             read_timeout    = 60000,
             retries         = 5,
+            tags            = ngx.null,
           }, service)
         end)
 
@@ -896,6 +901,7 @@ for _, strategy in helpers.each_strategy() do
             write_timeout   = 10000,
             read_timeout    = 10000,
             retries         = 6,
+            tags            = ngx.null,
           }, service)
         end)
 
@@ -1006,6 +1012,43 @@ for _, strategy in helpers.each_strategy() do
           assert.is_nil(err_t)
           assert.is_nil(service)
         end)
+      end)
+
+      describe(":select_by_tags()", function()
+        if strategy == "cassandra" then
+          setup(function()
+            assert(db:truncate("services"))
+
+            for i = 1, 5 do
+              assert(db.services:insert({
+                name = "service_" .. i,
+                host = "service" .. i .. ".com",
+                tags = { "tag1_" .. i, "tag2_" .. i }
+              }))
+            end
+          end)
+
+          -- I/O
+          it("returns existing Service", function()
+            local total = 0
+            for row, err, page in db.services:each_by_tags(10, { "tag1_2", "tag2_2" }) do
+              assert.is_nil(err)
+              assert.equal("service2.com", row.host)
+              total = total + 1
+            end
+
+            assert.equal(1, total)
+          end)
+
+          it("returns nothing on non-existing Service", function()
+            local total = 0
+            for row, err, page in db.services:each_by_tags(10, { "non existing", "tag2_2" }) do
+              assert.is_nil(err)
+              total = total + 1
+            end
+            assert.equal(0, total)
+          end)
+        end
       end)
 
       describe(":update()", function()
@@ -1324,6 +1367,7 @@ for _, strategy in helpers.each_strategy() do
           service          = {
             id = service.id
           },
+          tags             = ngx.null,
         }, route)
 
         local route_in_db, err, err_t = db.routes:select({ id = route.id })

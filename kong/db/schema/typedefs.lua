@@ -87,4 +87,9 @@ typedefs.uuid = Schema.define {
   auto = true,
 }
 
+typedefs.tags = Schema.define {
+  type = "set",
+  elements = { type = "string" }
+}
+
 return typedefs
