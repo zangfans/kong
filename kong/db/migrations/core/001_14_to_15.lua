@@ -54,6 +54,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "consumers_username_idx" ON "consumers" ("username");
 
       DO $$
       BEGIN
@@ -70,6 +71,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "cluster_events_at_idx" ON "cluster_events" ("at");
 
       DO $$
       BEGIN
@@ -78,6 +80,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "cluster_events_channel_idx" ON "cluster_events" ("channel");
 
       DO $$
       BEGIN
@@ -86,6 +89,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "routes_service_id_idx" ON "routes" ("service_id");
 
       DO $$
       BEGIN
@@ -94,6 +98,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "snis_fkey_certificate" ON "snis" ("certificate_id");
 
       DO $$
       BEGIN
@@ -110,6 +115,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "plugins_consumer_id_idx" ON "plugins" ("consumer_id");
 
       DO $$
       BEGIN

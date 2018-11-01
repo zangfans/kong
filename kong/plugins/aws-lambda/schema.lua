@@ -17,6 +17,7 @@ local REGIONS = {
 return {
   name = "aws-lambda",
   fields = {
+    { run_on = typedefs.run_on({ one_of = { "gateway" } }) },
     { config = {
         type = "record",
         fields = {
