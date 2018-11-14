@@ -54,6 +54,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS consumers_username_idx ON consumers((lower(username)));
 
       DO $$
       BEGIN
@@ -62,6 +63,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS ssl_certificates_pkey ON certificates(id);
 
       DO $$
       BEGIN
@@ -70,6 +72,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "cluster_events_at_idx" on cluster_events (at);
 
       DO $$
       BEGIN
@@ -78,6 +81,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "cluster_events_channel_idx" on cluster_events (channel);
 
       DO $$
       BEGIN
@@ -86,6 +90,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS routes_service_id_idx ON routes(service_id);
 
       DO $$
       BEGIN
@@ -94,6 +99,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "snis_certificate_id_idx" on snis (certificate_id);
 
       DO $$
       BEGIN
@@ -102,6 +108,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "plugins_api_id_idx" on plugins (api_id);
 
       DO $$
       BEGIN
@@ -110,6 +117,7 @@ return {
         -- Do nothing, accept existing state
       END;
       $$;
+      CREATE INDEX IF NOT EXISTS "plugins_consumer_id_idx" on plugins (consumer_id);
 
       DO $$
       BEGIN
