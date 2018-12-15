@@ -570,7 +570,6 @@ for _, strategy in helpers.each_strategy() do
         database   = strategy,
         nginx_conf = "spec/fixtures/custom_nginx.template",
         lua_ssl_trusted_certificate = "../spec/fixtures/kong_spec.crt",
-        stream_listen = "0.0.0.0:9100",
         db_update_frequency = 0.1,
       })
     end)
@@ -970,38 +969,6 @@ for _, strategy in helpers.each_strategy() do
             end
           end)
 
-          it("#stream and http modules do not duplicate active health checks", function()
-
-            local port1 = gen_port()
-
-            local server1 = http_server(localhost, port1, { 1 })
-
-            -- configure healthchecks
-            local upstream_name = add_upstream({
-              healthchecks = healthchecks_config {
-                active = {
-                  http_path = "/status",
-                  healthy = {
-                    interval = HEALTHCHECK_INTERVAL,
-                    successes = 1,
-                  },
-                  unhealthy = {
-                    interval = HEALTHCHECK_INTERVAL,
-                    http_failures = 1,
-                  },
-                }
-              }
-            })
-            add_target(upstream_name, localhost, port1)
-
-            ngx.sleep(HEALTHCHECK_INTERVAL * 5)
-
-            -- collect server results; hitcount
-            local _, _, _, hcs1 = server1:done()
-
-            assert(hcs1 < 8)
-          end)
-
           it("perform active health checks -- up then down", function()
 
             for nfails = 1, 3 do
@@ -1189,7 +1156,6 @@ for _, strategy in helpers.each_strategy() do
               nginx_conf = "spec/fixtures/custom_nginx.template",
               lua_ssl_trusted_certificate = "../spec/fixtures/kong_spec.crt",
               db_update_frequency = 0.1,
-              stream_listen = "0.0.0.0:9100",
             })
 
             -- Give time for healthchecker to detect
@@ -1400,71 +1366,6 @@ for _, strategy in helpers.each_strategy() do
             assert.are.equal(0, fails)
           end)
 
-          local stream_it = (mode == "ipv6") and pending or it
-          stream_it("perform passive health checks -- #stream connection failure", function()
-
-            -- configure healthchecks
-            local upstream_name = add_upstream({
-              healthchecks = healthchecks_config {
-                passive = {
-                  unhealthy = {
-                    tcp_failures = 1,
-                  }
-                }
-              }
-            })
-            local port1 = add_target(upstream_name, localhost)
-            local port2 = add_target(upstream_name, localhost)
-            local _, service_name, route_id = add_api(upstream_name, 50, 50, nil, nil, "tcp")
-            finally(function()
-              delete_api(service_name, route_id)
-            end)
-
-            -- setup target servers:
-            -- server2 will only respond for half of the test and will shutdown.
-            -- Then server1 will take over.
-            local server1_oks = SLOTS * 1.5
-            local server2_oks = SLOTS / 2
-            local server1 = helpers.tcp_server(port1, {
-              requests = server1_oks,
-              prefix = "1 ",
-            })
-            local server2 = helpers.tcp_server(port2, {
-              requests = server2_oks,
-              prefix = "2 ",
-            })
-            ngx.sleep(1)
-
-            -- server1 and server2 take requests
-            -- server1 takes all requests once server2 fails
-            local ok1 = 0
-            local ok2 = 0
-            local fails = 0
-            for _ = 1, SLOTS * 2 do
-              local sock = ngx.socket.tcp()
-              assert(sock:connect(localhost, 9100))
-              assert(sock:send("hello\n"))
-              local response, err = sock:receive()
-              if err then
-                fails = fails + 1
-                print(err)
-              elseif response:match("^1 ") then
-                ok1 = ok1 + 1
-              elseif response:match("^2 ") then
-                ok2 = ok2 + 1
-              end
-            end
-
-            -- finish up TCP server threads
-            server1:join()
-            server2:join()
-
-            -- verify
-            assert.are.equal(server1_oks, ok1)
-            assert.are.equal(server2_oks, ok2)
-            assert.are.equal(0, fails)
-          end)
-
           it("perform passive health checks -- send #timeouts", function()
 
             -- configure healthchecks
@@ -1506,6 +1407,119 @@ for _, strategy in helpers.each_strategy() do
             local _, oks2, fails2 = server2:done()
             assert.same(10, oks2)
             assert.same(0, fails2)
+
+          end)
+
+          describe("#stream", function()
+
+            lazy_setup(function()
+              -- restart Kong with stream_listen
+              helpers.stop_kong(nil, true, true)
+              helpers.start_kong({
+                database   = strategy,
+                nginx_conf = "spec/fixtures/custom_nginx.template",
+                lua_ssl_trusted_certificate = "../spec/fixtures/kong_spec.crt",
+                db_update_frequency = 0.1,
+                stream_listen = "0.0.0.0:9100",
+              })
+            end)
+
+            local stream_it = (mode == "ipv6") and pending or it
+            stream_it("perform passive health checks -- #stream connection failure", function()
+
+              -- configure healthchecks
+              local upstream_name = add_upstream({
+                healthchecks = healthchecks_config {
+                  passive = {
+                    unhealthy = {
+                      tcp_failures = 1,
+                    }
+                  }
+                }
+              })
+              local port1 = add_target(upstream_name, localhost)
+              local port2 = add_target(upstream_name, localhost)
+              local _, service_name, route_id = add_api(upstream_name, 50, 50, nil, nil, "tcp")
+              finally(function()
+                delete_api(service_name, route_id)
+              end)
+
+              -- setup target servers:
+              -- server2 will only respond for half of the test and will shutdown.
+              -- Then server1 will take over.
+              local server1_oks = SLOTS * 1.5
+              local server2_oks = SLOTS / 2
+              local server1 = helpers.tcp_server(port1, {
+                requests = server1_oks,
+                prefix = "1 ",
+              })
+              local server2 = helpers.tcp_server(port2, {
+                requests = server2_oks,
+                prefix = "2 ",
+              })
+              ngx.sleep(1)
+
+              -- server1 and server2 take requests
+              -- server1 takes all requests once server2 fails
+              local ok1 = 0
+              local ok2 = 0
+              local fails = 0
+              for _ = 1, SLOTS * 2 do
+                local sock = ngx.socket.tcp()
+                assert(sock:connect(localhost, 9100))
+                assert(sock:send("hello\n"))
+                local response, err = sock:receive()
+                if err then
+                  fails = fails + 1
+                  print(err)
+                elseif response:match("^1 ") then
+                  ok1 = ok1 + 1
+                elseif response:match("^2 ") then
+                  ok2 = ok2 + 1
+                end
+              end
+
+              -- finish up TCP server threads
+              server1:join()
+              server2:join()
+
+              -- verify
+              assert.are.equal(server1_oks, ok1)
+              assert.are.equal(server2_oks, ok2)
+              assert.are.equal(0, fails)
+            end)
+
+            it("#stream and http modules do not duplicate active health checks", function()
+
+              local port1 = gen_port()
+
+              local server1 = http_server(localhost, port1, { 1 })
+
+              -- configure healthchecks
+              local upstream_name = add_upstream({
+                healthchecks = healthchecks_config {
+                  active = {
+                    http_path = "/status",
+                    healthy = {
+                      interval = HEALTHCHECK_INTERVAL,
+                      successes = 1,
+                    },
+                    unhealthy = {
+                      interval = HEALTHCHECK_INTERVAL,
+                      http_failures = 1,
+                    },
+                  }
+                }
+              })
+              add_target(upstream_name, localhost, port1)
+
+              ngx.sleep(HEALTHCHECK_INTERVAL * 5)
+
+              -- collect server results; hitcount
+              local _, _, _, hcs1 = server1:done()
+
+              assert(hcs1 < 8)
+            end)
 
           end)
 
