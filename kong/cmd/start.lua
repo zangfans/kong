@@ -28,6 +28,7 @@ local function execute(args)
 
   local db = assert(DB.new(conf))
   assert(db:init_connector())
+  assert(db:connect({ no_keyspace = true }))
 
   local schema_state = assert(db:schema_state())
 

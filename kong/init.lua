@@ -275,6 +275,7 @@ function Kong.init()
 
   local db = assert(DB.new(config))
   assert(db:init_connector())
+  assert(db:connect({ no_keyspace = true }))
 
   schema_state = assert(db:schema_state())
   if schema_state.needs_bootstrap  then

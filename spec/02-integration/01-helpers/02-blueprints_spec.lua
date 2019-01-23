@@ -13,8 +13,10 @@ for _, strategy in helpers.each_strategy() do
     lazy_setup(function()
       local db = assert(DB.new(helpers.test_conf, strategy))
       assert(db:init_connector())
+      assert(db:connect())
       assert(db.plugins:load_plugin_schemas(helpers.test_conf.loaded_plugins))
       assert(db:truncate())
+      assert(db:close())
       bp = assert(Blueprints.new(db))
     end)
 

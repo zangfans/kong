@@ -108,6 +108,7 @@ kong_global.init_pdk(_G.kong, conf, nil) -- nil: latest PDK
 
 local db = assert(DB.new(conf))
 assert(db:init_connector())
+--assert(db:connect({ no_keyspace = true }))
 db.plugins:load_plugin_schemas(conf.loaded_plugins)
 local blueprints = assert(Blueprints.new(db))
 
@@ -187,8 +188,11 @@ local function get_db_utils(strategy, tables, plugins)
   -- DAO (DB module)
   local db = assert(DB.new(conf, strategy))
   assert(db:init_connector())
+  assert(db:connect({ no_keyspace = true }))
 
   bootstrap_database(db)
+
+  assert(db:close())
 
   do
     local database = conf.database
