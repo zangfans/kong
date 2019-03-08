@@ -1369,6 +1369,7 @@ function Schema:process_auto_fields(data, context, nulls)
 
   local now_s  = ngx_time()
   local now_ms = ngx_now()
+  local check_immutable = false
   local read_before_write = false
   local cache_key_modified = false
 
@@ -1452,6 +1453,11 @@ function Schema:process_auto_fields(data, context, nulls)
     if context == "select" and field.type == "integer" and type(data[key]) == "number" then
       data[key] = floor(data[key])
     end
+
+    if context == 'update' and field.immutable then
+      read_before_write = true
+      check_immutable = true
+    end
   end
 
   --[[
@@ -1480,7 +1486,7 @@ function Schema:process_auto_fields(data, context, nulls)
     read_before_write = true
   end
 
-  return data, nil, read_before_write
+  return output, nil, read_before_write, check_immutable
 end
 
 
@@ -1596,6 +1602,31 @@ function Schema:validate(input, full_check)
     return nil, errors
   end
   return true
+end
+
+
+-- Iterate through input fields on update and check agianst schema for 
+-- immutable attribute. If immutable attribute is set, compare input values
+-- against entity values to detirmine whether input is valid.
+-- @param input The input table.
+-- @param entity The entity update will be performed on.
+-- @return True on success.
+-- On failure, it returns nil and a table containing all errors by field name.
+-- In all cases, the input table is untouched.
+function Schema:validate_immutable(input, entity)
+  local errors = {}
+
+  for key, field in pairs(input) do
+    if self.fields[key].immutable and (entity[key] ~= nil or input[key] ~= entity[key]) then
+      errors[key] = validation_errors.IMMUTABLE
+    end
+  end
+
+  if next(errors) then
+    return nil, errors
+  end
+
+  return true, errors
 end
 
 
