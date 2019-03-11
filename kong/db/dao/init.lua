@@ -179,7 +179,7 @@ end
 
 
 local function check_update(self, key, entity, options, name)
-  local entity_to_update, err, read_before_write, check_immutable =
+  local entity_to_update, err, read_before_write, check_immutable_fields =
     self.schema:process_auto_fields(entity, "update")
   if not entity_to_update then
     local err_t = self.errors:schema_violation(err)
@@ -198,8 +198,8 @@ local function check_update(self, key, entity, options, name)
       return nil, nil, err, err_t
     end
 
-    if rbw_entity and check_immutable then
-      ok, errors = self.schema:validate_immutable(entity_to_update, rbw_entity)
+    if rbw_entity and check_immutable_fields then
+      ok, errors = self.schema:validate_immutable_fields(entity_to_update, rbw_entity)
 
       if not ok then
         local err_t = self.errors:schema_violation(errors)

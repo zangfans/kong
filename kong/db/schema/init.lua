@@ -81,6 +81,7 @@ local validation_errors = {
   REQUIRED                  = "required field missing",
   NO_FOREIGN_DEFAULT        = "will not generate a default value for a foreign field",
   UNKNOWN                   = "unknown field",
+  IMMUTABLE                 = "field cannot be updated",
   -- entity checks
   REQUIRED_FOR_ENTITY_CHECK = "field required for entity check",
   ENTITY_CHECK              = "failed entity check: %s(%s)",
@@ -1369,9 +1370,9 @@ function Schema:process_auto_fields(data, context, nulls)
 
   local now_s  = ngx_time()
   local now_ms = ngx_now()
-  local check_immutable = false
   local read_before_write = false
   local cache_key_modified = false
+  local check_immutable_fields = false
 
   data = tablex.deepcopy(data)
 
@@ -1455,8 +1456,12 @@ function Schema:process_auto_fields(data, context, nulls)
     end
 
     if context == 'update' and field.immutable then
+      -- if entity schema contains immutable fields,
+      -- we need to preform a read-before-write and
+      -- check the existing record to insure update
+      -- is valid.
       read_before_write = true
-      check_immutable = true
+      check_immutable_fields = true
     end
   end
 
@@ -1486,7 +1491,7 @@ function Schema:process_auto_fields(data, context, nulls)
     read_before_write = true
   end
 
-  return output, nil, read_before_write, check_immutable
+  return data, nil, read_before_write, check_immutable_fields
 end
 
 
@@ -1613,11 +1618,13 @@ end
 -- @return True on success.
 -- On failure, it returns nil and a table containing all errors by field name.
 -- In all cases, the input table is untouched.
-function Schema:validate_immutable(input, entity)
+function Schema:validate_immutable_fields(input, entity)
   local errors = {}
 
+  input = tablex.deepcopy(input)
+
   for key, field in pairs(input) do
-    if self.fields[key].immutable and (entity[key] ~= nil or input[key] ~= entity[key]) then
+    if self.fields[key].immutable and entity[key] ~= nil and input[key] ~= entity[key] then
       errors[key] = validation_errors.IMMUTABLE
     end
   end
