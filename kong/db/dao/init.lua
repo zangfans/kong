@@ -199,7 +199,7 @@ local function check_update(self, key, entity, options, name)
     end
 
     if rbw_entity and check_immutable_fields then
-      ok, errors = self.schema:validate_immutable_fields(entity_to_update, rbw_entity)
+      local ok, errors = self.schema:validate_immutable_fields(entity_to_update, rbw_entity)
 
       if not ok then
         local err_t = self.errors:schema_violation(errors)

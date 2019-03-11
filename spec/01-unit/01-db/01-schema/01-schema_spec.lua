@@ -2481,7 +2481,7 @@ describe("schema", function()
       local db_entity = { name = "test1" }
 
       local TestEntities = Schema.new(test_schema)
-      local ok, errors = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
+      local ok, _ = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
   
       assert.truthy(ok)
     end)
