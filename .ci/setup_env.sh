@@ -6,7 +6,7 @@ set -e
 #---------
 OPENSSL_DOWNLOAD=$DOWNLOAD_CACHE/openssl-$OPENSSL
 OPENRESTY_DOWNLOAD=$DOWNLOAD_CACHE/openresty-$OPENRESTY
-OPENRESTY_PATCHES_DOWNLOAD=$DOWNLOAD_CACHE/openresty-patches-master
+OPENRESTY_PATCHES_DOWNLOAD=$DOWNLOAD_CACHE/openresty-patches
 LUAROCKS_DOWNLOAD=$DOWNLOAD_CACHE/luarocks-$LUAROCKS
 CPAN_DOWNLOAD=$DOWNLOAD_CACHE/cpanm
 
@@ -26,7 +26,12 @@ fi
 
 if [ ! "$(ls -A $OPENRESTY_PATCHES_DOWNLOAD)" ]; then
   pushd $DOWNLOAD_CACHE
-    curl -s -S -L https://github.com/Kong/openresty-patches/archive/master.tar.gz | tar xz
+    git clone -b $OPENRESTY_PATCHES_BRANCH https://github.com/Kong/openresty-patches.git
+  popd
+else
+  pushd $OPENRESTY_PATCHES_DOWNLOAD
+    git fetch --all
+    git reset --hard origin/$OPENRESTY_PATCHES_BRANCH
   popd
 fi
 
