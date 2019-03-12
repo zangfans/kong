@@ -81,7 +81,7 @@ local validation_errors = {
   REQUIRED                  = "required field missing",
   NO_FOREIGN_DEFAULT        = "will not generate a default value for a foreign field",
   UNKNOWN                   = "unknown field",
-  IMMUTABLE                 = "field cannot be updated",
+  IMMUTABLE                 = "immutable field cannot be updated",
   -- entity checks
   REQUIRED_FOR_ENTITY_CHECK = "field required for entity check",
   ENTITY_CHECK              = "failed entity check: %s(%s)",
@@ -1622,7 +1622,9 @@ function Schema:validate_immutable_fields(input, entity)
   local errors = {}
 
   for key, field in self:each_field(input) do
-    if field.immutable and entity[key] ~= nil and input[key] ~= entity[key] then
+    local compare = utils.is_array(input[key]) and tablex.compare_no_order or tablex.deepcompare
+
+    if field.immutable and entity[key] ~= nil and not compare(input[key], entity[key]) then
       errors[key] = validation_errors.IMMUTABLE
     end
   end

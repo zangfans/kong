@@ -2464,8 +2464,8 @@ describe("schema", function()
       local ok, errors = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
   
       assert.falsy(ok)
-      assert.equals(errors.name, 'field cannot be updated')
-      assert.equals(errors.address, 'field cannot be updated')
+      assert.equals(errors.name, 'immutable field cannot be updated')
+      assert.equals(errors.address, 'immutable field cannot be updated')
       assert.falsy(errors.email)
     end)
 
@@ -2484,6 +2484,111 @@ describe("schema", function()
       local ok, _ = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
   
       assert.truthy(ok)
+    end)
+
+    it("can asses if set type immutable fields are similar", function()
+      local test_schema = {
+        name = "test",
+      
+        fields = {
+          { table = { type = "set", immutable = true }, },
+        },
+      }
+
+      local entity_to_update = { table = { dog = "hello", cat = { bat = "hello", }, }, }
+      local db_entity = { table = { dog = "hello", cat = { bat = "hello", }, }, }
+      local TestEntities = Schema.new(test_schema)
+      local ok, _ = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
+  
+      assert.truthy(ok)
+    end)
+
+    it("can asses if foriegn type immutable fields are similar", function()
+      local test_schema = {
+        name = "test",
+      
+        fields = {
+          { entity = { type = "foriegn", immutable = true }, },
+        },
+      }
+
+      local entity_to_update = { entity = { id = '1' }, }
+      local db_entity = { entity = { id = '1' }, }
+      local TestEntities = Schema.new(test_schema)
+      local ok, _ = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
+  
+      assert.truthy(ok)
+    end)
+
+    it("can asses if array type immutable fields are similar", function()
+      local test_schema = {
+        name = "test",
+      
+        fields = {
+          { list = { type = "array", immutable = true }, },
+        },
+      }
+
+      local entity_to_update = { 'dog', 'bat', 'cat', }
+      local db_entity = { 'bat', 'cat', 'dog', }
+      local TestEntities = Schema.new(test_schema)
+      local ok, _ = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
+  
+      assert.truthy(ok)
+    end)
+
+    it("can asses if set type immutable fields are not similar", function()
+      local test_schema = {
+        name = "test",
+      
+        fields = {
+          { table = { type = "set", immutable = true }, },
+        },
+      }
+
+      local entity_to_update = { table = { dog = "hello", cat = { bat = "hello", }, }, }
+      local db_entity = { table = { dog = "hello", cat = { bat = "goodbye", }, }, }
+      local TestEntities = Schema.new(test_schema)
+      local ok, err = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
+  
+      assert.falsy(ok)
+      assert.equals(err.table, 'immutable field cannot be updated')
+    end)
+
+    it("can asses if foriegn type immutable fields are not similar", function()
+      local test_schema = {
+        name = "test",
+      
+        fields = {
+          { entity = { type = "foriegn", immutable = true }, },
+        },
+      }
+
+      local entity_to_update = { entity = { id = '1' }, }
+      local db_entity = { entity = { id = '2' }, }
+      local TestEntities = Schema.new(test_schema)
+      local ok, err = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
+  
+      assert.falsy(ok)
+      assert.equals(err.entity, 'immutable field cannot be updated')
+    end)
+
+    it("can asses if array type immutable fields are not similar", function()
+      local test_schema = {
+        name = "test",
+      
+        fields = {
+          { list = { type = "array", immutable = true }, },
+        },
+      }
+
+      local entity_to_update = { list = { 'dog', 'bat', 'cat', }, }
+      local db_entity = { list = { 'bat', 'cat', 'rat', }, }
+      local TestEntities = Schema.new(test_schema)
+      local ok, err = TestEntities:validate_immutable_fields(entity_to_update, db_entity)
+  
+      assert.falsy(ok)
+      assert.equals(err.list, 'immutable field cannot be updated')
     end)
   end)
 end)
