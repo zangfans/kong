@@ -1620,7 +1620,6 @@ end
 -- In all cases, the input table is untouched.
 function Schema:validate_immutable_fields(input, entity)
   local errors = {}
-  local fields = self.fields
 
   for key, field in self:each_field(input) do
     if field.immutable and entity[key] ~= nil and input[key] ~= entity[key] then
