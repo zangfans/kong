@@ -1620,11 +1620,10 @@ end
 -- In all cases, the input table is untouched.
 function Schema:validate_immutable_fields(input, entity)
   local errors = {}
+  local fields = self.fields
 
-  input = tablex.deepcopy(input)
-
-  for key, field in pairs(input) do
-    if self.fields[key].immutable and entity[key] ~= nil and input[key] ~= entity[key] then
+  for key, field in self:each_field(input) do
+    if field.immutable and entity[key] ~= nil and input[key] ~= entity[key] then
       errors[key] = validation_errors.IMMUTABLE
     end
   end
