@@ -7,25 +7,27 @@
 --
 -- In the `access_by_lua` phase, it is responsible for retrieving the route being proxied by
 -- a consumer. Then it is responsible for loading the plugins to execute on this request.
+local semaphore   = require "ngx.semaphore"
 local ck          = require "resty.cookie"
 local meta        = require "kong.meta"
 local utils       = require "kong.tools.utils"
 local Router      = require "kong.router"
 local reports     = require "kong.reports"
 local balancer    = require "kong.runloop.balancer"
+local certificate = require "kong.runloop.certificate"
 local mesh        = require "kong.runloop.mesh"
 local constants   = require "kong.constants"
-local semaphore   = require "ngx.semaphore"
 local singletons  = require "kong.singletons"
 local concurrency = require "kong.concurrency"
 local declarative = require "kong.db.declarative"
-local certificate = require "kong.runloop.certificate"
 local BasePlugin  = require "kong.plugins.base_plugin"
 
 
 local kong        = kong
 local pcall       = pcall
 local pairs       = pairs
+local error       = error
+local assert      = assert
 local ipairs      = ipairs
 local tostring    = tostring
 local tonumber    = tonumber
@@ -35,19 +37,32 @@ local lower       = string.lower
 local fmt         = string.format
 local sort        = table.sort
 local ngx         = ngx
+local arg         = ngx.arg
+local var         = ngx.var
 local log         = ngx.log
+local exit        = ngx.exit
 local sleep       = ngx.sleep
+local header      = ngx.header
 local ngx_now     = ngx.now
+local starttls    = ngx.req.starttls
+local start_time  = ngx.req.start_time
+local worker_id   = ngx.worker.id
 local re_match    = ngx.re.match
 local re_find     = ngx.re.find
 local update_time = ngx.update_time
+local timer_at    = ngx.timer.at
+local timer_every = ngx.timer.every
+local get_phase   = ngx.get_phase
 local subsystem   = ngx.config.subsystem
+local kong_dict   = ngx.shared.kong
 local unpack      = unpack
 
 
 local ERR         = ngx.ERR
 local CRIT        = ngx.CRIT
+local INFO        = ngx.INFO
 local WARN        = ngx.WARN
+local ERROR       = ngx.ERROR
 local DEBUG       = ngx.DEBUG
 local NOTICE      = ngx.NOTICE
 
@@ -121,7 +136,7 @@ local function load_declarative_config()
   }
 
   return concurrency.with_worker_mutex(opts, function()
-    local value = ngx.shared.kong:get("declarative_config:loaded")
+    local value = kong_dict:get("declarative_config:loaded")
     if value then
       return true
     end
@@ -194,7 +209,7 @@ local function cache_services()
   end
 
   if count > 0 then
-    ngx.timer.at(0, prewarm_hostnames, hosts, count)
+    timer_at(0, prewarm_hostnames, hosts, count)
   end
 
   return true
@@ -203,12 +218,12 @@ end
 
 local function start_timers()
   -- initialize balancers for active healthchecks
-  ngx.timer.at(0, function()
+  timer_at(0, function()
     balancer.init()
   end)
 
 
-  ngx.timer.every(1, function(premature)
+  timer_every(1, function(premature)
     if premature then
       return
     end
@@ -232,12 +247,12 @@ local function register_events()
 
   worker_events.register(function(data)
     if not data.schema then
-      log(ngx.ERR, "[events] missing schema in crud subscriber")
+      log(ERR, "[events] missing schema in crud subscriber")
       return
     end
 
     if not data.entity then
-      log(ngx.ERR, "[events] missing entity in crud subscriber")
+      log(ERR, "[events] missing entity in crud subscriber")
       return
     end
 
@@ -261,7 +276,7 @@ local function register_events()
     end
 
     if not data.operation then
-      log(ngx.ERR, "[events] missing operation in crud subscriber")
+      log(ERR, "[events] missing operation in crud subscriber")
       return
     end
 
@@ -274,14 +289,14 @@ local function register_events()
     -- crud:routes
     local _, err = worker_events.post_local("crud", entity_channel, data)
     if err then
-      log(ngx.ERR, "[events] could not broadcast crud event: ", err)
+      log(ERR, "[events] could not broadcast crud event: ", err)
       return
     end
 
     -- crud:routes:create
     _, err = worker_events.post_local("crud", entity_operation_channel, data)
     if err then
-      log(ngx.ERR, "[events] could not broadcast crud event: ", err)
+      log(ERR, "[events] could not broadcast crud event: ", err)
       return
     end
   end, "dao:crud")
@@ -311,7 +326,7 @@ local function register_events()
     if data.operation == "create" or
        data.operation == "update" then
       if utils.hostname_type(data.entity.host) == "name" then
-        ngx.timer.at(0, prewarm_hostname, data.entity.host)
+        timer_at(0, prewarm_hostname, data.entity.host)
       end
     end
   end, "crud", "services")
@@ -475,7 +490,7 @@ end
 
 
 local function init_worker()
-  WORKER_ID = ngx.worker.id()
+  WORKER_ID = worker_id()
 
   local _, err = cache_services()
   if err then
@@ -664,8 +679,9 @@ do
   end
 
   build_router = function(version, recurse, tries)
+    local phase = get_phase()
     if version == "init" then
-      if ngx.get_phase() == "init" then
+      if phase == "init" then
         log(DEBUG, "initialising router...")
       else
         log(DEBUG, "initialising router on worker #", WORKER_ID, "...")
@@ -790,7 +806,7 @@ do
     singletons.router = new_router
 
     if version == "init" then
-      if ngx.get_phase() == "init" then
+      if phase == "init" then
         log(DEBUG, "initialising router done")
       else
         log(DEBUG, "initialising router on worker #", WORKER_ID, " done")
@@ -812,8 +828,9 @@ do
   end
 
   build_plugins = function(version, recurse, tries)
+    local phase = get_phase()
     if version == "init" then
-      if ngx.get_phase() == "init" then
+      if phase == "init" then
         log(DEBUG, "initialising plugins...")
       else
         log(DEBUG, "initialising plugins on worker #", WORKER_ID, "...")
@@ -937,7 +954,7 @@ do
     plugins = new_plugins
 
     if version == "init" then
-      if ngx.get_phase() == "init" then
+      if phase == "init" then
         log(DEBUG, "initialising plugins done")
       else
         log(DEBUG, "initialising plugins on worker #", WORKER_ID, " done")
@@ -980,7 +997,7 @@ do
   end
 
   local function rebuild_async(callback, version, semaphore)
-    local ok, err = ngx.timer.at(0, rebuild_timer, callback, version, semaphore)
+    local ok, err = timer_at(0, rebuild_timer, callback, version, semaphore)
     if not ok then
       log(CRIT, "could not create rebuild timer: ", err)
       return false
@@ -1159,19 +1176,16 @@ return {
       local router, err = get_router()
       if not router then
         log(ERR, "no router to route connection (reason: " .. err .. ")")
-        return ngx.exit(500)
+        return exit(500)
       end
 
       local match_t = router.exec(ngx)
       if not match_t then
         log(ERR, "no Route found with those values")
-        return ngx.exit(500)
+        return exit(500)
       end
 
-      local var = ngx.var
-
       local ssl_termination_ctx -- OpenSSL SSL_CTX to use for termination
-
       local ssl_preread_alpn_protocols = var.ssl_preread_alpn_protocols
       -- ssl_preread_alpn_protocols is a comma separated list
       -- see https://trac.nginx.org/nginx/ticket/1616
@@ -1186,25 +1200,25 @@ return {
         -- XXX: for now, use presence of SNI to terminate.
         local sni = var.ssl_preread_server_name
         if sni then
-          ngx.log(ngx.DEBUG, "SNI: ", sni)
+          log(DEBUG, "SNI: ", sni)
 
           local err
           ssl_termination_ctx, err = certificate.find_certificate(sni)
           if not ssl_termination_ctx then
-            ngx.log(ngx.ERR, err)
-            return ngx.exit(ngx.ERROR)
+            log(ERR, err)
+            return exit(ERROR)
           end
 
           -- TODO Fake certificate phase?
 
-          ngx.log(ngx.INFO, "attempting to terminate TLS")
+          log(INFO, "attempting to terminate TLS")
         end
       end
 
       -- Terminate TLS
-      if ssl_termination_ctx and not ngx.req.starttls(ssl_termination_ctx) then -- luacheck: ignore
+      if ssl_termination_ctx and not starttls(ssl_termination_ctx) then -- luacheck: ignore
         -- errors are logged by nginx core
-        return ngx.exit(ngx.ERROR)
+        return exit(ERROR)
       end
 
       ctx.KONG_PREREAD_START = get_now()
@@ -1246,8 +1260,8 @@ return {
       ctx.KONG_PREREAD_TIME     = now - ctx.KONG_PREREAD_START
       ctx.KONG_PREREAD_ENDED_AT = now
       -- time spent in Kong before sending the request to upstream
-      -- ngx.req.start_time() is kept in seconds with millisecond resolution.
-      ctx.KONG_PROXY_LATENCY   = now - ngx.req.start_time() * 1000
+      -- start_time() is kept in seconds with millisecond resolution.
+      ctx.KONG_PROXY_LATENCY   = now - start_time() * 1000
       ctx.KONG_PROXIED         = true
     end
   },
@@ -1262,8 +1276,6 @@ return {
       end
 
       -- routing request
-
-      local var = ngx.var
 
       ctx.KONG_ACCESS_START = get_now()
 
@@ -1310,8 +1322,8 @@ return {
       if (protocols and protocols.https and not protocols.http and
           forwarded_proto ~= "https")
       then
-        ngx.header["connection"] = "Upgrade"
-        ngx.header["upgrade"]    = "TLS/1.2, HTTP/1.1"
+        header["connection"] = "Upgrade"
+        header["upgrade"]    = "TLS/1.2, HTTP/1.1"
         return kong.response.exit(426, { message = "Please use HTTPS protocol" })
       end
 
@@ -1455,8 +1467,6 @@ return {
     end,
     -- Only executed if the `router` module found a route and allows nginx to proxy it.
     after = function(ctx)
-      local var = ngx.var
-
       do
         -- Nginx's behavior when proxying a request with an empty querystring
         -- `/foo?` is to keep `$is_args` an empty string, hence effectively
@@ -1505,8 +1515,8 @@ return {
       ctx.KONG_ACCESS_TIME     = now - ctx.KONG_ACCESS_START
       ctx.KONG_ACCESS_ENDED_AT = now
       -- time spent in Kong before sending the request to upstream
-      -- ngx.req.start_time() is kept in seconds with millisecond resolution.
-      ctx.KONG_PROXY_LATENCY   = now - ngx.req.start_time() * 1000
+      -- start_time() is kept in seconds with millisecond resolution.
+      ctx.KONG_PROXY_LATENCY   = now - start_time() * 1000
       ctx.KONG_PROXIED         = true
     end
   },
@@ -1530,8 +1540,6 @@ return {
   },
   header_filter = {
     before = function(ctx)
-      local header = ngx.header
-
       if not ctx.KONG_PROXIED then
         return
       end
@@ -1543,7 +1551,7 @@ return {
 
       local upstream_status_header = constants.HEADERS.UPSTREAM_STATUS
       if kong.configuration.enabled_headers[upstream_status_header] then
-        header[upstream_status_header] = tonumber(sub(ngx.var.upstream_status or "", -3))
+        header[upstream_status_header] = tonumber(sub(var.upstream_status or "", -3))
         if not header[upstream_status_header] then
           log(ERR, "failed to set ", upstream_status_header, " header")
         end
@@ -1564,8 +1572,6 @@ return {
       end
     end,
     after = function(ctx)
-      local header = ngx.header
-
       if ctx.KONG_PROXIED then
         if kong.configuration.enabled_headers[constants.HEADERS.UPSTREAM_LATENCY] then
           header[constants.HEADERS.UPSTREAM_LATENCY] = ctx.KONG_WAITING_TIME
@@ -1591,7 +1597,7 @@ return {
   },
   body_filter = {
     after = function(ctx)
-      if not ngx.arg[2] then
+      if not arg[2] then
         return
       end
 
