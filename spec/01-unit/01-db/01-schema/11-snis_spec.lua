@@ -37,12 +37,14 @@ describe("snis", function()
     end)
 
     it("rejects wrong wildcard placements", function()
-      local names = { "foo.*.com", "foo.*.wildcard.com" }
+      local names = { "foo.*.com", "foo.*.wildcard.com", "*.example.*",
+                      "*.foo.*.wildcard.com" }
 
       for _, name in ipairs(names) do
         local ok, err = validate({ name = name, certificate = certificate })
         assert.is_nil(ok)
-        assert.same({ name = "wildcard must be leftmost or rightmost character" }, err)
+        assert.is_true(err.name == "wildcard must be leftmost or rightmost character"
+                       or err.name == "only one wildcard must be specified")
       end
     end)
 
